@@ -1,0 +1,123 @@
+# Spring AI Ikanos
+
+Run the tools of a declarative [Ikanos](https://github.com/naftiko/ikanos) capability **inside** a Spring AI application.
+
+Every tool declared in a capability's `exposes: type: mcp` block becomes a Spring AI `ToolCallback` that executes in the same JVM. No MCP server is started, no port is bound and no second process runs. The same YAML can still be served as a remote MCP server; choosing between the two is a deployment decision, not a rewrite.
+
+> **Status: proof of concept (phase 2).** Core bridge, Boot auto-configuration, starter and example. The `destructiveHint` approval gate is next. See the [design](#design).
+
+## When to use it
+
+| Agent and tools share... | Use |
+|---|---|
+| Team, release cadence, deployment unit | **In-JVM** — this project |
+| Nothing (tools are shared or owned by another team) | **Remote MCP** — an Ikanos MCP server (see [Known limits](#known-limits) on client compatibility) |
+
+## Quick start (Spring Boot)
+
+```xml
+<dependency>
+    <groupId>org.springaicommunity</groupId>
+    <artifactId>spring-ai-starter-ikanos</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+</dependency>
+```
+
+```yaml
+spring:
+  ai:
+    ikanos:
+      capabilities:
+        - classpath:capabilities/*.yml
+```
+
+```java
+@Bean
+ChatClient chatClient(ChatClient.Builder builder, IkanosToolCallbackProvider ikanosTools) {
+    return builder.defaultTools(ikanosTools).build();
+}
+```
+
+The tools are deliberately **not** added to every `ChatClient`: attach them where you want them, with `defaultTools(...)` or per request with `.tools(...)`. A complete application is in [`examples/fleet`](examples/fleet).
+
+### Properties
+
+| Property | Default | Meaning |
+|---|---|---|
+| `spring.ai.ikanos.enabled` | `true` | Master switch |
+| `spring.ai.ikanos.capabilities` | — (required) | Capability YAML locations; Spring resource patterns allowed |
+| `spring.ai.ikanos.expose` | all `type: mcp` exposes | Restrict to these MCP expose namespaces |
+| `spring.ai.ikanos.tool-name-prefix` | none | Prefix for tool names shown to the model (the engine always gets the original name) |
+| `spring.ai.ikanos.telemetry` | `false` | Ikanos' own OpenTelemetry tracing and metrics |
+
+Startup fails fast when no capability is configured, a location matches nothing, an `expose` namespace does not exist, or two tools end up with the same name.
+
+Use `file:` locations when a capability uses relative `import`s: resources inside a jar are parsed from their stream and cannot resolve relative paths.
+
+## Usage without Boot (core module)
+
+```java
+Capability capability = Capability.builder()
+        .loadFromClasspath("/capabilities/fleet.yml")
+        .telemetry(false)          // Spring AI already observes tool calls
+        .build();                  // builds, never starts the MCP server
+
+IkanosCapabilityLifecycle lifecycle = new IkanosCapabilityLifecycle(List.of(capability)); // a SmartLifecycle bean in Spring
+IkanosToolCallbackProvider tools = IkanosToolCallbackProvider.builder()
+        .capabilities(capability)
+        .build();
+
+String answer = chatClient.prompt()
+        .user("Which ships are active?")
+        .tools(tools)
+        .call()
+        .content();
+```
+
+`IkanosCapabilityLifecycle` starts the capability's outbound HTTP clients and stops them on shutdown. It never touches server adapters.
+
+## Behaviour
+
+- **Tool definitions** come from `McpToolUtils.createToolDefinition`, and successful results are serialized like `SyncMcpToolCallback` does, so a tool looks the same to the model in-JVM or over MCP.
+- **`isError` results** become a `ToolExecutionException` with the capability-authored content.
+- **Engine exceptions** are logged and replaced by a generic `Tool '<name>' failed` message, so upstream URLs or configuration never reach the model.
+- **Duplicate tool names** across capabilities fail fast. Use `exposeNamespaces(...)` or `toolNamePrefix(...)`.
+- MCP `ToolAnnotations` (`readOnlyHint`, `destructiveHint`, ...) are available via `IkanosToolCallback.getToolAnnotations()`.
+
+## Known limits
+
+- **Flat input schemas.** Ikanos input parameters carry a type and description only (no nested objects, `enum` or `format`).
+- **`ToolContext` is not propagated** to the engine yet.
+- **Bindings resolve from environment variables** at capability construction, not from the Spring `Environment`.
+- **Classpath weight.** `ikanos-engine` `1.0.0-beta7` brings Restlet `2.7.0-m2` (Jetty 12) and Jackson 2 alongside Spring Boot 4's Jackson 3. They live in different packages and do not conflict as long as no Ikanos server starts. The next engine (Restlet `3.0.0-m1`, Jackson 3) needs `json-path` `3.0.0`; see below.
+- **OpenTelemetry SDK.** With `ikanos-engine` up to `1.0.0-beta7`, the core module adds `opentelemetry-sdk` at runtime (profile `otel-sdk-workaround`, on by default) because the engine links an SDK class on every tool call even with telemetry disabled (naftiko/ikanos#800). Fixed by naftiko/ikanos PR #810; the workaround goes away with the first release containing it.
+- **Remote posture and `spring-ai-starter-mcp-client`.** An Ikanos MCP server speaks only MCP `2026-07-28` (stateless, no `initialize`). Spring AI `2.0.1` ships MCP Java SDK `2.0.1`, whose client speaks at most `2025-11-25` and starts with `initialize`, so it cannot connect to an Ikanos server today. Tool definitions and outputs are nevertheless identical in both postures (verified over raw `2026-07-28` HTTP in `PostureParityIntegrationTests`).
+
+- **Next engine on Spring Boot 4.1: pin `json-path` `3.0.0`.** From the engine release that contains naftiko/ikanos #797 (Jackson 3), output mappings need `Jackson3JsonNodeJsonProvider`, which only exists in `json-path` `3.0.0` and later. Spring Boot 4.1 manages `2.10.0`, so every tool with a `mapping:` fails on first call with `NoClassDefFoundError`. Your application must pin it: the `<json-path.version>3.0.0</json-path.version>` property with `spring-boot-starter-parent`, or a direct `com.jayway.jsonpath:json-path:3.0.0` entry in `<dependencyManagement>` when you import the `spring-boot-dependencies` BOM. The starter cannot do it for you: the application's Boot dependency management wins over the starter's. Not needed with `1.0.0-beta7`.
+
+## Requirements
+
+Java 21+, Spring AI `2.0.x`, Spring Boot `4.0`/`4.1`, `io.ikanos:ikanos-engine` built on MCP Java SDK `2.x` (`1.0.0-beta7` or later). The build enforces a single `mcp-core` `2.x` on the classpath.
+
+`mvn verify` builds against `ikanos-engine` `1.0.0-beta7` from Maven Central.
+
+To build against the next engine (naftiko/ikanos PR #810: Restlet `3.0.0-m1`, Jackson 3, embedding fixes), install it first, then activate `pr810`. The profile drops `opentelemetry-sdk` and pins `json-path` `3.0.0`:
+
+```shell
+git clone --branch fix/issue-800-801-engine-embedding https://github.com/naftiko/ikanos && cd ikanos
+mvn install -pl modules/ikanos-engine -am -DskipTests -Djacoco.skip=true -Drevision=1.0.0-beta8-pr810-SNAPSHOT
+```
+
+Then `mvn verify -Ppr810` here.
+
+## Design
+
+The design, roadmap and the planned Spring AI Community proposal live in the Naftiko design document *Spring AI Ikanos* (phases 1–6).
+
+## Commercial relationship
+
+Naftiko develops the Ikanos engine (Apache 2.0) and offers commercial products and services around it. This project is Apache 2.0 and does not require any commercial component.
+
+## License
+
+[Apache License 2.0](LICENSE)

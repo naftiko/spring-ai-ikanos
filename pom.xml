@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.springaicommunity</groupId>
+    <artifactId>spring-ai-ikanos-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>Spring AI Ikanos</name>
+    <description>Run declarative Ikanos capability tools as in-JVM Spring AI ToolCallbacks.</description>
+    <url>https://github.com/naftiko/spring-ai-ikanos</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+        </license>
+    </licenses>
+
+    <scm>
+        <url>https://github.com/naftiko/spring-ai-ikanos</url>
+        <connection>scm:git:https://github.com/naftiko/spring-ai-ikanos.git</connection>
+    </scm>
+
+    <modules>
+        <module>spring-ai-ikanos-core</module>
+        <module>spring-ai-ikanos-autoconfigure</module>
+        <module>spring-ai-starter-ikanos</module>
+        <module>examples/fleet</module>
+    </modules>
+
+    <properties>
+        <java.version>21</java.version>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <spring-ai.version>2.0.1</spring-ai.version>
+        <spring-boot.version>4.1.1</spring-boot.version>
+        <ikanos.version>1.0.0-beta7</ikanos.version>
+
+        <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
+        <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
+        <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.ikanos</groupId>
+                <artifactId>ikanos-engine</artifactId>
+                <version>${ikanos.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!-- E5: exactly one MCP Java SDK major on the classpath, shared with Spring AI 2.0 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven-enforcer-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-mcp-sdk-2</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[21,)</version>
+                                </requireJavaVersion>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>io.modelcontextprotocol.sdk:mcp-core</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <include>io.modelcontextprotocol.sdk:mcp-core:[2.0.0,3.0.0)</include>
+                                    </includes>
+                                    <message>spring-ai-ikanos needs MCP Java SDK 2.x (shared McpSchema with Spring AI 2.0). Upgrade ikanos-engine to a version built on mcp-core 2.x.</message>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                    <configuration>
+                        <release>${maven.compiler.release}</release>
+                        <parameters>true</parameters>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven-jar-plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <!-- Build against naftiko/ikanos PR #810 (Restlet 3.0.0-m1 + Jackson 3 from #797, plus the
+             #800/#801 embedding fixes). Install the engine first, from the PR worktree:
+               mvn install -pl modules/ikanos-engine -am -DskipTests -Djacoco.skip=true -Drevision=1.0.0-beta8-pr810-SNAPSHOT
+             Activating this profile also deactivates the core module's opentelemetry-sdk workaround. -->
+        <profile>
+            <id>pr810</id>
+            <properties>
+                <ikanos.version>1.0.0-beta8-pr810-SNAPSHOT</ikanos.version>
+            </properties>
+            <!-- J2: Spring Boot 4.1.1 manages json-path 2.10.0, which has no Jackson 3 JSON
+                 providers; the engine's output mappings need 3.0.0. Only this one override is
+                 needed: the Boot-managed tools.jackson 3.1.x and json-schema-validator 3.0.1
+                 pass the bridge's tests. A <json-path.version> property does not work here:
+                 imported BOMs are interpolated with their own properties (only -D overrides). -->
+            <dependencyManagement>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.jayway.jsonpath</groupId>
+                        <artifactId>json-path</artifactId>
+                        <version>3.0.0</version>
+                    </dependency>
+                </dependencies>
+            </dependencyManagement>
+        </profile>
+    </profiles>
+</project>

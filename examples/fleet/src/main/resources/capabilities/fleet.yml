@@ -1,0 +1,52 @@
+ikanos: "1.0.0-beta7"
+info:
+  display: Fleet
+  description: Example capability bridged in-JVM by spring-ai-ikanos
+capability:
+  consumes:
+  - namespace: registry
+    type: http
+    # Point at your fleet registry API.
+    baseUri: "http://localhost:8080"
+    resources:
+      ships:
+        path: /ships
+        operations:
+          list-ships:
+            method: GET
+            inputParameters:
+              status:
+                in: query
+  exposes:
+  # Declared as an MCP expose: the same file can be served as a remote MCP server.
+  # spring-ai-ikanos reads the tools from here and never starts the server.
+  - type: mcp
+    address: localhost
+    port: 3001
+    namespace: fleet
+    description: Fleet tools
+    tools:
+      list-ships:
+        description: List ships by operational status
+        hints:
+          readOnly: true
+        inputParameters:
+          status:
+            type: string
+            required: true
+            description: Operational status, e.g. active
+        call: registry.list-ships
+        with:
+          status: fleet.status
+        outputParameters:
+        - type: array
+          mapping: "$.ships"
+          items:
+            type: object
+            properties:
+              imo:
+                type: string
+                mapping: "$.imo_number"
+              name:
+                type: string
+                mapping: "$.vessel_name"

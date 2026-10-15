@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springaicommunity</groupId>
+        <artifactId>spring-ai-ikanos-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>spring-ai-ikanos-core</artifactId>
+    <name>Spring AI Ikanos Core</name>
+    <description>ToolCallback bridge from Ikanos capability MCP tools to Spring AI.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-model</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-mcp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.ikanos</groupId>
+            <artifactId>ikanos-engine</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-client-chat</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <!-- F2 workaround (naftiko/ikanos#800): up to 1.0.0-beta7, ikanos-engine marks
+             opentelemetry-sdk <optional> but TelemetryBootstrap links
+             io.opentelemetry.sdk.trace.SpanProcessor on every ToolHandler.handleToolCall, even with
+             telemetry(false). Without it every tool call fails with NoClassDefFoundError.
+             Fixed by naftiko/ikanos PR #810: activating -Ppr810 (defined here and in the parent)
+             deactivates this profile, proving the bridge runs without the SDK.
+             Delete this profile once the bridge depends on a release containing #810. -->
+        <profile>
+            <id>otel-sdk-workaround</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>io.opentelemetry</groupId>
+                    <artifactId>opentelemetry-sdk</artifactId>
+                    <scope>runtime</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>pr810</id>
+        </profile>
+    </profiles>
+
+    <build>
+        <plugins>
+            <!-- Share FleetFixture with the autoconfigure module's tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
