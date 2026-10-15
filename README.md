@@ -4,7 +4,7 @@ Run the tools of a declarative [Ikanos](https://github.com/naftiko/ikanos) capab
 
 Every tool declared in a capability's `exposes: type: mcp` block becomes a Spring AI `ToolCallback` that executes in the same JVM. No MCP server is started, no port is bound and no second process runs. The same YAML can still be served as a remote MCP server; choosing between the two is a deployment decision, not a rewrite.
 
-> **Status: proof of concept (phase 2).** Core bridge, Boot auto-configuration, starter and example. The `destructiveHint` approval gate is next. See the [design](#design).
+> **Status: proof of concept (phase 3).** Core bridge, approval gate, Boot auto-configuration, starter and example. See the [design](#design).
 
 ## When to use it
 
@@ -49,8 +49,9 @@ The tools are deliberately **not** added to every `ChatClient`: attach them wher
 | `spring.ai.ikanos.expose` | all `type: mcp` exposes | Restrict to these MCP expose namespaces |
 | `spring.ai.ikanos.tool-name-prefix` | none | Prefix for tool names shown to the model (the engine always gets the original name) |
 | `spring.ai.ikanos.telemetry` | `false` | Ikanos' own OpenTelemetry tracing and metrics |
+| `spring.ai.ikanos.approval.mode` | `require-handler` | How tools that may be destructive are gated: `require-handler`, `deny-destructive` or `none` (see [Approval gate](#approval-gate)) |
 
-Startup fails fast when no capability is configured, a location matches nothing, an `expose` namespace does not exist, or two tools end up with the same name.
+Startup fails fast when no capability is configured, a location matches nothing, an `expose` namespace does not exist, two tools end up with the same name, or a tool that may be destructive has no approval handler.
 
 Use `file:` locations when a capability uses relative `import`s: resources inside a jar are parsed from their stream and cannot resolve relative paths.
 
@@ -65,6 +66,7 @@ Capability capability = Capability.builder()
 IkanosCapabilityLifecycle lifecycle = new IkanosCapabilityLifecycle(List.of(capability)); // a SmartLifecycle bean in Spring
 IkanosToolCallbackProvider tools = IkanosToolCallbackProvider.builder()
         .capabilities(capability)
+        .approvalHandler(request -> ToolApprovalDecision.approve()) // see Approval gate
         .build();
 
 String answer = chatClient.prompt()
@@ -83,6 +85,31 @@ String answer = chatClient.prompt()
 - **Engine exceptions** are logged and replaced by a generic `Tool '<name>' failed` message, so upstream URLs or configuration never reach the model.
 - **Duplicate tool names** across capabilities fail fast. Use `exposeNamespaces(...)` or `toolNamePrefix(...)`.
 - MCP `ToolAnnotations` (`readOnlyHint`, `destructiveHint`, ...) are available via `IkanosToolCallback.getToolAnnotations()`.
+
+## Approval gate
+
+Tools that may be destructive are reviewed by a `ToolApprovalHandler` before they run. Which tools are gated follows the MCP `ToolAnnotations` defaults (`readOnlyHint` false, `destructiveHint` true): every tool is gated **unless** its capability declares `hints: readOnly: true` or `hints: destructive: false`. A tool with no `hints` at all is gated.
+
+```java
+@Bean
+ToolApprovalHandler toolApprovalHandler() {
+    return request -> isAllowed(request.toolName(), request.input(), request.toolContext())
+            ? ToolApprovalDecision.approve()
+            : ToolApprovalDecision.deny("needs a change ticket");
+}
+```
+
+| `spring.ai.ikanos.approval.mode` | Without a handler bean | With a handler bean |
+|---|---|---|
+| `require-handler` (default) | **Startup fails**, naming the tools | Handler reviews each call |
+| `deny-destructive` | Every call denied | Handler ignored; every call denied |
+| `none` | No gate (logged at `WARN`) | No gate |
+
+- A denial is **returned to the model** as the tool result (`Denied: <reason>`), so it can explain or try another path. A handler that throws becomes a `ToolExecutionException`; the tool does not run.
+- The gate is a `ToolCallback` decorator, not a `ToolAdvisor`, so it composes with `ToolSearchToolCallingAdvisor` (`DefaultChatClient` allows only one `ToolAdvisor`).
+- It runs synchronously on the tool-calling thread. A handler that waits for a human blocks that thread.
+- Hints are authored by the capability. The gate enforces the declared classification; it does not infer one. Tools derived from flows via `ref` are gated unless they declare `readOnly` or `destructive: false`.
+- The `spring-ai-ikanos-approval` module has no Ikanos dependency. Any `ToolCallback` implementing `ToolAnnotationsAware` can be gated with `ToolApprovalGate` or `ApprovalGatedToolCallbackProvider`.
 
 ## Known limits
 

@@ -23,6 +23,7 @@ import io.ikanos.Capability;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springaicommunity.ikanos.approval.ToolApprovalMode;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -65,7 +66,7 @@ class ChatClientToolLoopIntegrationTests {
 		Capability capability = this.fixture.capability("fleet");
 		this.lifecycle = new IkanosCapabilityLifecycle(List.of(capability));
 		this.lifecycle.start();
-		IkanosToolCallbackProvider tools = IkanosToolCallbackProvider.builder().capabilities(capability).build();
+		IkanosToolCallbackProvider tools = IkanosToolCallbackProvider.builder().approvalMode(ToolApprovalMode.NONE).capabilities(capability).build();
 
 		ScriptedChatModel model = new ScriptedChatModel("list-ships", "{\"status\":\"active\"}");
 

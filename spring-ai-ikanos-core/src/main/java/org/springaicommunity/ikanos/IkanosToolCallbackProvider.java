@@ -28,6 +28,10 @@ import io.ikanos.Capability;
 import io.ikanos.engine.exposes.ServerAdapter;
 import io.ikanos.engine.exposes.mcp.McpServerAdapter;
 import io.modelcontextprotocol.spec.McpSchema;
+import org.jspecify.annotations.Nullable;
+import org.springaicommunity.ikanos.approval.ToolApprovalGate;
+import org.springaicommunity.ikanos.approval.ToolApprovalHandler;
+import org.springaicommunity.ikanos.approval.ToolApprovalMode;
 
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -44,6 +48,13 @@ import org.springframework.util.Assert;
  * <p>
  * Duplicate tool names across capabilities (after prefixing) fail fast with an
  * {@link IllegalArgumentException}, like {@code MethodToolCallbackProvider}.
+ *
+ * <p>
+ * Tools that may be destructive (MCP defaults: anything not annotated {@code readOnlyHint: true}
+ * or {@code destructiveHint: false}) are wrapped by the approval gate, according to the
+ * {@link Builder#approvalMode(ToolApprovalMode) approval mode}. The default,
+ * {@link ToolApprovalMode#REQUIRE_HANDLER}, fails {@link Builder#build()} when such tools exist
+ * and no {@link Builder#approvalHandler(ToolApprovalHandler) handler} is set.
  */
 public final class IkanosToolCallbackProvider implements ToolCallbackProvider {
 
@@ -72,6 +83,10 @@ public final class IkanosToolCallbackProvider implements ToolCallbackProvider {
 		private final Set<String> namespaces = new LinkedHashSet<>();
 
 		private String toolNamePrefix = "";
+
+		private ToolApprovalMode approvalMode = ToolApprovalMode.REQUIRE_HANDLER;
+
+		private @Nullable ToolApprovalHandler approvalHandler;
 
 		private Builder() {
 		}
@@ -113,6 +128,36 @@ public final class IkanosToolCallbackProvider implements ToolCallbackProvider {
 			return this;
 		}
 
+		/**
+		 * How to treat tools that may be destructive. Defaults to
+		 * {@link ToolApprovalMode#REQUIRE_HANDLER}.
+		 * @param approvalMode the mode
+		 * @return this builder
+		 */
+		public Builder approvalMode(ToolApprovalMode approvalMode) {
+			Assert.notNull(approvalMode, "approvalMode must not be null");
+			this.approvalMode = approvalMode;
+			return this;
+		}
+
+		/**
+		 * The handler asked before each call to a tool that may be destructive, in
+		 * {@link ToolApprovalMode#REQUIRE_HANDLER} mode.
+		 * @param approvalHandler the handler, or {@code null} for none
+		 * @return this builder
+		 */
+		public Builder approvalHandler(@Nullable ToolApprovalHandler approvalHandler) {
+			this.approvalHandler = approvalHandler;
+			return this;
+		}
+
+		/**
+		 * Build the provider.
+		 * @return the provider
+		 * @throws IllegalArgumentException on duplicate tool names or unknown namespaces
+		 * @throws org.springaicommunity.ikanos.approval.ToolApprovalRequiredException in
+		 * {@code REQUIRE_HANDLER} mode when a tool may be destructive and no handler is set
+		 */
 		public IkanosToolCallbackProvider build() {
 			Map<String, ToolCallback> byName = new LinkedHashMap<>();
 			Set<String> matchedNamespaces = new LinkedHashSet<>();
@@ -146,7 +191,8 @@ public final class IkanosToolCallbackProvider implements ToolCallbackProvider {
 			if (!unknown.isEmpty()) {
 				throw new IllegalArgumentException("No MCP expose found for namespace(s) " + unknown);
 			}
-			return new IkanosToolCallbackProvider(new ArrayList<>(byName.values()));
+			return new IkanosToolCallbackProvider(
+					ToolApprovalGate.apply(new ArrayList<>(byName.values()), this.approvalMode, this.approvalHandler));
 		}
 
 	}

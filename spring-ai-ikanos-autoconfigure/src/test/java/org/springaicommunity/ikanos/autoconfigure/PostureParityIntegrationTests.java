@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Test;
 import org.springaicommunity.ikanos.FleetFixture;
 import org.springaicommunity.ikanos.IkanosCapabilityLifecycle;
 import org.springaicommunity.ikanos.IkanosToolCallbackProvider;
+import org.springaicommunity.ikanos.approval.ToolApprovalMode;
 
 import org.springframework.ai.mcp.McpToolUtils;
 import org.springframework.ai.tool.ToolCallback;
@@ -134,7 +135,7 @@ class PostureParityIntegrationTests {
 
 	private Map<String, ToolCallback> inJvmCallbacks() {
 		return Arrays
-			.stream(IkanosToolCallbackProvider.builder()
+			.stream(IkanosToolCallbackProvider.builder().approvalMode(ToolApprovalMode.NONE)
 				.capabilities(this.inJvm.getCapabilities())
 				.build()
 				.getToolCallbacks())

@@ -22,8 +22,10 @@ import io.ikanos.Capability;
 import org.springaicommunity.ikanos.IkanosCapabilityLifecycle;
 import org.springaicommunity.ikanos.IkanosCapabilityLoader;
 import org.springaicommunity.ikanos.IkanosToolCallbackProvider;
+import org.springaicommunity.ikanos.approval.ToolApprovalHandler;
 
 import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -42,6 +44,11 @@ import org.springframework.core.io.ResourceLoader;
  * lifecycle, and publishes one {@link IkanosToolCallbackProvider} bean. Following Spring AI's MCP
  * client precedent, the tools are <em>not</em> added to every {@code ChatClient} automatically:
  * attach them with {@code .tools(provider)} or {@code defaultTools(provider)}.
+ *
+ * <p>
+ * Tools that may be destructive are gated according to {@code spring.ai.ikanos.approval.mode}.
+ * With the default {@code require-handler}, startup fails unless a single
+ * {@link ToolApprovalHandler} bean is available.
  */
 @AutoConfiguration
 @ConditionalOnClass({ Capability.class, ToolCallbackProvider.class })
@@ -67,11 +74,13 @@ public class IkanosAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	IkanosToolCallbackProvider ikanosToolCallbackProvider(IkanosCapabilityLifecycle lifecycle,
-			IkanosProperties properties) {
+			IkanosProperties properties, ObjectProvider<ToolApprovalHandler> approvalHandler) {
 		return IkanosToolCallbackProvider.builder()
 			.capabilities(lifecycle.getCapabilities())
 			.exposeNamespaces(properties.getExpose())
 			.toolNamePrefix(properties.getToolNamePrefix())
+			.approvalMode(properties.getApproval().getMode())
+			.approvalHandler(approvalHandler.getIfUnique())
 			.build();
 	}
 

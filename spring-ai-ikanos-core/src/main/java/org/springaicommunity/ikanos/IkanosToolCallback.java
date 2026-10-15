@@ -22,6 +22,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
+import org.springaicommunity.ikanos.approval.ToolAnnotationsAware;
 
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.mcp.McpToolUtils;
@@ -56,7 +57,7 @@ import org.springframework.util.StringUtils;
  * The {@link ToolContext} is currently ignored: the Ikanos engine has no per-call context
  * channel yet.
  */
-public final class IkanosToolCallback implements ToolCallback {
+public final class IkanosToolCallback implements ToolCallback, ToolAnnotationsAware {
 
 	private static final Log logger = LogFactory.getLog(IkanosToolCallback.class);
 
@@ -108,6 +109,7 @@ public final class IkanosToolCallback implements ToolCallback {
 	 * The MCP annotations authored in the capability {@code hints} block, if any.
 	 * @return the annotations or {@code null}
 	 */
+	@Override
 	public McpSchema.@Nullable ToolAnnotations getToolAnnotations() {
 		return this.tool.annotations();
 	}

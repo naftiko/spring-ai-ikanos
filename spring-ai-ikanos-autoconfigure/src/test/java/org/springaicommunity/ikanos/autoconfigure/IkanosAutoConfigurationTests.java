@@ -18,7 +18,9 @@ package org.springaicommunity.ikanos.autoconfigure;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +29,10 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springaicommunity.ikanos.FleetFixture;
 import org.springaicommunity.ikanos.IkanosCapabilityLifecycle;
 import org.springaicommunity.ikanos.IkanosToolCallbackProvider;
+import org.springaicommunity.ikanos.approval.ApprovalGatedToolCallback;
+import org.springaicommunity.ikanos.approval.ToolApprovalDecision;
+import org.springaicommunity.ikanos.approval.ToolApprovalHandler;
+import org.springaicommunity.ikanos.approval.ToolApprovalRequiredException;
 
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -69,25 +75,27 @@ class IkanosAutoConfigurationTests {
 
 	@Test
 	void loadsCapabilitiesFromPatternAndCallsToolInJvm() {
-		this.runner.withPropertyValues("spring.ai.ikanos.capabilities=" + this.location).run(context -> {
-			assertThat(context).hasNotFailed();
-			assertThat(context.getBean(IkanosCapabilityLifecycle.class).isRunning()).isTrue();
+		this.runner.withPropertyValues("spring.ai.ikanos.capabilities=" + this.location)
+			.withBean(ToolApprovalHandler.class, () -> request -> ToolApprovalDecision.approve())
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+				assertThat(context.getBean(IkanosCapabilityLifecycle.class).isRunning()).isTrue();
 
-			IkanosToolCallbackProvider provider = context.getBean(IkanosToolCallbackProvider.class);
-			assertThat(names(provider)).containsExactly("list-ships", "decommission-ship");
+				IkanosToolCallbackProvider provider = context.getBean(IkanosToolCallbackProvider.class);
+				assertThat(names(provider)).containsExactly("list-ships", "decommission-ship");
 
-			ToolCallback listShips = provider.getToolCallbacks()[0];
-			assertThat(listShips.call("{\"status\":\"active\"}")).contains("Sea Eagle");
-			assertThat(this.fixture.requests).containsExactly("GET /ships?status=active");
-			assertThat(FleetFixture.isListening(this.fixture.mcpPort)).isFalse();
-		});
+				ToolCallback listShips = provider.getToolCallbacks()[0];
+				assertThat(listShips.call("{\"status\":\"active\"}")).contains("Sea Eagle");
+				assertThat(this.fixture.requests).containsExactly("GET /ships?status=active");
+				assertThat(FleetFixture.isListening(this.fixture.mcpPort)).isFalse();
+			});
 	}
 
 	@Test
 	void appliesPrefixAndExposeFilter() {
 		this.runner
 			.withPropertyValues("spring.ai.ikanos.capabilities=" + this.location, "spring.ai.ikanos.expose=fleet",
-					"spring.ai.ikanos.tool-name-prefix=fleet_")
+					"spring.ai.ikanos.tool-name-prefix=fleet_", "spring.ai.ikanos.approval.mode=none")
 			.run(context -> assertThat(names(context.getBean(IkanosToolCallbackProvider.class)))
 				.containsExactly("fleet_list-ships", "fleet_decommission-ship"));
 	}
@@ -132,6 +140,55 @@ class IkanosAutoConfigurationTests {
 		this.runner.withPropertyValues("spring.ai.ikanos.capabilities=" + this.location)
 			.withBean(IkanosToolCallbackProvider.class, () -> IkanosToolCallbackProvider.builder().build())
 			.run(context -> assertThat(context.getBean(IkanosToolCallbackProvider.class).getToolCallbacks()).isEmpty());
+	}
+
+	@Test
+	void destructiveToolWithoutHandlerFailsStartupNamingTheTool() {
+		this.runner.withPropertyValues("spring.ai.ikanos.capabilities=" + this.location)
+			.run(context -> assertThat(context).hasFailed()
+				.getFailure()
+				.rootCause()
+				.isInstanceOf(ToolApprovalRequiredException.class)
+				.hasMessageContaining("[decommission-ship]"));
+	}
+
+	@Test
+	void handlerBeanGatesTheDestructiveTool() {
+		List<String> reviewed = new ArrayList<>();
+		this.runner.withPropertyValues("spring.ai.ikanos.capabilities=" + this.location)
+			.withBean(ToolApprovalHandler.class, () -> request -> {
+				reviewed.add(request.toolName());
+				return ToolApprovalDecision.deny("ask the harbour master");
+			})
+			.run(context -> {
+				ToolCallback[] callbacks = context.getBean(IkanosToolCallbackProvider.class).getToolCallbacks();
+				assertThat(callbacks[0].call("{\"status\":\"active\"}")).contains("Sea Eagle");
+				assertThat(callbacks[1]).isInstanceOf(ApprovalGatedToolCallback.class);
+				assertThat(callbacks[1].call("{}")).isEqualTo("Denied: ask the harbour master");
+				assertThat(reviewed).containsExactly("decommission-ship");
+				assertThat(this.fixture.requests).containsExactly("GET /ships?status=active");
+			});
+	}
+
+	@Test
+	void denyDestructiveModeNeedsNoHandler() {
+		this.runner
+			.withPropertyValues("spring.ai.ikanos.capabilities=" + this.location,
+					"spring.ai.ikanos.approval.mode=deny-destructive")
+			.run(context -> {
+				assertThat(context).hasNotFailed();
+				ToolCallback decommission = context.getBean(IkanosToolCallbackProvider.class).getToolCallbacks()[1];
+				assertThat(decommission.call("{}")).startsWith("Denied: ");
+				assertThat(this.fixture.requests).isEmpty();
+			});
+	}
+
+	@Test
+	void noneModeLeavesToolsUngated() {
+		this.runner
+			.withPropertyValues("spring.ai.ikanos.capabilities=" + this.location, "spring.ai.ikanos.approval.mode=none")
+			.run(context -> assertThat(context.getBean(IkanosToolCallbackProvider.class).getToolCallbacks())
+				.noneMatch(ApprovalGatedToolCallback.class::isInstance));
 	}
 
 }

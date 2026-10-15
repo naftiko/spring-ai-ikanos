@@ -27,10 +27,21 @@
             <groupId>io.ikanos</groupId>
             <artifactId>ikanos-engine</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-ikanos-approval</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-client-chat</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- E4: the approval gate composes with Spring AI's tool search advisor -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-tool-search-advisor</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

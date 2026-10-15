@@ -23,6 +23,7 @@ import io.ikanos.engine.exposes.mcp.McpServerAdapter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springaicommunity.ikanos.approval.ToolApprovalMode;
 
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -54,7 +55,7 @@ class InJvmNoServerIntegrationTests {
 		try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
 			context.registerBean(IkanosCapabilityLifecycle.class, () -> new IkanosCapabilityLifecycle(List.of(capability)));
 			context.registerBean(IkanosToolCallbackProvider.class,
-					() -> IkanosToolCallbackProvider.builder().capabilities(capability).build());
+					() -> IkanosToolCallbackProvider.builder().approvalMode(ToolApprovalMode.NONE).capabilities(capability).build());
 			context.refresh();
 
 			assertThat(context.getBean(IkanosCapabilityLifecycle.class).isRunning()).isTrue();

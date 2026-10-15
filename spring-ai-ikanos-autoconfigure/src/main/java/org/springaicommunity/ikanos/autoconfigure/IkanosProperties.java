@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.jspecify.annotations.Nullable;
+import org.springaicommunity.ikanos.approval.ToolApprovalMode;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -57,6 +58,8 @@ public class IkanosProperties {
 	 * calls, so this is off by default.
 	 */
 	private boolean telemetry;
+
+	private final Approval approval = new Approval();
 
 	public boolean isEnabled() {
 		return this.enabled;
@@ -96,6 +99,33 @@ public class IkanosProperties {
 
 	public void setTelemetry(boolean telemetry) {
 		this.telemetry = telemetry;
+	}
+
+	public Approval getApproval() {
+		return this.approval;
+	}
+
+	/**
+	 * Approval gate for tools that may be destructive.
+	 */
+	public static class Approval {
+
+		/**
+		 * How to treat tools that may be destructive (MCP defaults: any tool not annotated
+		 * readOnlyHint=true or destructiveHint=false). 'require-handler' fails startup unless a
+		 * ToolApprovalHandler bean exists; 'deny-destructive' registers them but denies every
+		 * call; 'none' disables the gate.
+		 */
+		private ToolApprovalMode mode = ToolApprovalMode.REQUIRE_HANDLER;
+
+		public ToolApprovalMode getMode() {
+			return this.mode;
+		}
+
+		public void setMode(ToolApprovalMode mode) {
+			this.mode = mode;
+		}
+
 	}
 
 }
