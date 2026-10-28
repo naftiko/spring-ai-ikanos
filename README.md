@@ -110,7 +110,7 @@ ToolApprovalHandler toolApprovalHandler() {
 - It runs synchronously on the tool-calling thread. A handler that waits for a human blocks that thread.
 - Hints are authored by the capability. The gate enforces the declared classification; it does not infer one. Tools derived from flows via `ref` are gated unless they declare `readOnly` or `destructive: false`.
 - The `spring-ai-ikanos-approval` module has no Ikanos dependency. Any `ToolCallback` implementing `ToolAnnotationsAware` can be gated with `ToolApprovalGate` or `ApprovalGatedToolCallbackProvider`.
-- **Remote MCP tools.** `McpToolAnnotations.adaptAll(...)` makes any callback that exposes its `McpSchema.Tool` through `getTool()` gateable. Spring AI's `SyncMcpToolCallback`/`AsyncMcpToolCallback` do not expose it yet; we propose adding it upstream. Until then, Spring AI MCP tools are passed through ungated:
+- **Remote MCP tools.** `McpToolAnnotations.adaptAll(...)` makes any callback that exposes its MCP tool annotations through `getToolAnnotations()` (or its whole `McpSchema.Tool` through `getTool()`) gateable. Spring AI's `SyncMcpToolCallback`/`AsyncMcpToolCallback` do not expose them yet; we propose adding `getToolAnnotations()` upstream. Until then, Spring AI MCP tools are passed through ungated:
 
   ```java
   List<ToolCallback> gated = ToolApprovalGate.apply(

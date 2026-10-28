@@ -34,7 +34,8 @@ import static org.mockito.Mockito.verify;
 
 /**
  * Track B against the real Spring AI {@link SyncMcpToolCallback} built from the proposed
- * upstream change (a local {@code spring-ai-mcp:2.1.0-SNAPSHOT} with {@code getTool()}).
+ * upstream change (a local {@code spring-ai-mcp:2.1.0-SNAPSHOT} with
+ * {@code getToolAnnotations()}).
  * Run with {@code mvn verify -Ptrackb -pl spring-ai-ikanos-approval}.
  */
 class SpringAiMcpCallbackGatingTests {
@@ -54,7 +55,7 @@ class SpringAiMcpCallbackGatingTests {
 		List<ToolCallback> gated = ToolApprovalGate.apply(McpToolAnnotations.adaptAll(List.of(read, delete)),
 				ToolApprovalMode.REQUIRE_HANDLER, request -> ToolApprovalDecision.deny("remote delete needs a ticket"));
 
-		assertThat(McpToolAnnotations.toolOf(delete)).containsSame(deleteFile);
+		assertThat(delete.getToolAnnotations()).isSameAs(deleteFile.annotations());
 		assertThat(gated.get(0)).isInstanceOf(ToolAnnotationsAware.class)
 			.isNotInstanceOf(ApprovalGatedToolCallback.class);
 		assertThat(gated.get(1)).isInstanceOf(ApprovalGatedToolCallback.class);

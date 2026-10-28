@@ -37,12 +37,14 @@ import org.springframework.util.Assert;
  * and {@code AsyncMcpToolCallback} that Spring AI's MCP client creates for remote tools.
  *
  * <p>
- * A callback is recognized when it has a public no-argument {@code getTool()} method
- * returning {@link McpSchema.Tool}. Spring AI's MCP callbacks gain that accessor in the
- * upstream change proposed by this project (Track B); on Spring AI versions without it,
- * {@link #adapt(ToolCallback)} returns empty and {@link #adaptAll(List)} leaves such
- * callbacks untouched, so they are not gated. The lookup is reflective so this module
- * does not depend on {@code spring-ai-mcp} or on a particular Spring AI version.
+ * A callback is recognized when it has a public no-argument {@code getToolAnnotations()}
+ * method returning {@link McpSchema.ToolAnnotations}, or else a {@code getTool()} method
+ * returning {@link McpSchema.Tool}. Spring AI's MCP callbacks gain
+ * {@code getToolAnnotations()} in the upstream change proposed by this project (Track B);
+ * on Spring AI versions without it, {@link #adapt(ToolCallback)} returns empty and
+ * {@link #adaptAll(List)} leaves such callbacks untouched, so they are not gated. The
+ * lookup is reflective so this module does not depend on {@code spring-ai-mcp} or on a
+ * particular Spring AI version.
  */
 public final class McpToolAnnotations {
 
@@ -50,35 +52,29 @@ public final class McpToolAnnotations {
 	}
 
 	/**
-	 * The MCP tool wrapped by a callback, if it exposes one through {@code getTool()}.
-	 * @param callback any tool callback
-	 * @return the wrapped MCP tool, or empty
+	 * Wrap a callback so it reports the annotations of its MCP tool.
+	 * @param callback the callback
+	 * @return the callback itself if it is already {@link ToolAnnotationsAware}, an adapter
+	 * if it exposes its MCP tool annotations, otherwise empty
 	 */
-	public static Optional<McpSchema.Tool> toolOf(ToolCallback callback) {
+	public static Optional<ToolCallback> adapt(ToolCallback callback) {
 		Assert.notNull(callback, "callback must not be null");
+		if (callback instanceof ToolAnnotationsAware) {
+			return Optional.of(callback);
+		}
 		Method accessor = accessor(callback.getClass());
 		if (accessor == null) {
 			return Optional.empty();
 		}
 		try {
-			return Optional.ofNullable((McpSchema.Tool) accessor.invoke(callback));
+			Object value = accessor.invoke(callback);
+			McpSchema.@Nullable ToolAnnotations annotations = (value instanceof McpSchema.Tool tool)
+					? tool.annotations() : (McpSchema.ToolAnnotations) value;
+			return Optional.of(new AnnotatedToolCallback(callback, annotations));
 		}
 		catch (ReflectiveOperationException | RuntimeException ex) {
 			return Optional.empty();
 		}
-	}
-
-	/**
-	 * Wrap a callback so it reports the annotations of its MCP tool.
-	 * @param callback the callback
-	 * @return the callback itself if it is already {@link ToolAnnotationsAware}, an adapter
-	 * if it exposes its MCP tool, otherwise empty
-	 */
-	public static Optional<ToolCallback> adapt(ToolCallback callback) {
-		if (callback instanceof ToolAnnotationsAware) {
-			return Optional.of(callback);
-		}
-		return toolOf(callback).map(tool -> new AnnotatedToolCallback(callback, tool.annotations()));
 	}
 
 	/**
@@ -97,10 +93,14 @@ public final class McpToolAnnotations {
 	}
 
 	private static @Nullable Method accessor(Class<?> type) {
+		Method method = publicMethod(type, "getToolAnnotations", McpSchema.ToolAnnotations.class);
+		return (method != null) ? method : publicMethod(type, "getTool", McpSchema.Tool.class);
+	}
+
+	private static @Nullable Method publicMethod(Class<?> type, String name, Class<?> returnType) {
 		try {
-			Method method = type.getMethod("getTool");
-			if (Modifier.isStatic(method.getModifiers())
-					|| !McpSchema.Tool.class.isAssignableFrom(method.getReturnType())) {
+			Method method = type.getMethod(name);
+			if (Modifier.isStatic(method.getModifiers()) || !returnType.isAssignableFrom(method.getReturnType())) {
 				return null;
 			}
 			return method;

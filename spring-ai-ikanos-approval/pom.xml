@@ -32,7 +32,7 @@
     </dependencies>
 
     <profiles>
-        <!-- Track B: gate the real Spring AI SyncMcpToolCallback once it exposes getTool().
+        <!-- Track B: gate the real Spring AI SyncMcpToolCallback once it exposes getToolAnnotations().
              Needs a local spring-ai-mcp 2.1.0-SNAPSHOT built from the proposed upstream change:
                (in a spring-projects/spring-ai clone on that branch)
                mvnw install -pl mcp/common -am -DskipTests
