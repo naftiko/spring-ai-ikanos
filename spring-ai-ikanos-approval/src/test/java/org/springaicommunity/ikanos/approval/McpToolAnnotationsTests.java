@@ -31,8 +31,9 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Track B — remote MCP tool callbacks that expose {@code getTool()} (as proposed for
- * Spring AI's {@code SyncMcpToolCallback}/{@code AsyncMcpToolCallback}) can be gated.
+ * Track B — remote MCP tool callbacks that expose {@code getToolAnnotations()} (as
+ * proposed for Spring AI's {@code SyncMcpToolCallback}/{@code AsyncMcpToolCallback}) or
+ * {@code getTool()} can be gated.
  */
 class McpToolAnnotationsTests {
 
@@ -41,21 +42,28 @@ class McpToolAnnotationsTests {
 	}
 
 	@Test
-	void recognizesACallbackExposingItsMcpTool() {
-		McpSchema.Tool tool = tool("deleteFile", McpSchema.ToolAnnotations.builder().destructiveHint(true).build());
-		RemoteMcpTool remote = new RemoteMcpTool(tool);
+	void recognizesACallbackExposingItsToolAnnotations() {
+		McpSchema.ToolAnnotations annotations = McpSchema.ToolAnnotations.builder().destructiveHint(true).build();
+		RemoteMcpTool remote = new RemoteMcpTool(tool("deleteFile", annotations));
 
-		assertThat(McpToolAnnotations.toolOf(remote)).containsSame(tool);
 		assertThat(McpToolAnnotations.adapt(remote)).get()
 			.isInstanceOf(ToolAnnotationsAware.class)
-			.satisfies(cb -> assertThat(((ToolAnnotationsAware) cb).getToolAnnotations().destructiveHint()).isTrue());
+			.satisfies(cb -> assertThat(((ToolAnnotationsAware) cb).getToolAnnotations()).isSameAs(annotations));
+	}
+
+	@Test
+	void recognizesACallbackExposingItsMcpTool() {
+		McpSchema.ToolAnnotations annotations = McpSchema.ToolAnnotations.builder().destructiveHint(true).build();
+		ToolExposingMcpTool remote = new ToolExposingMcpTool(tool("deleteFile", annotations));
+
+		assertThat(McpToolAnnotations.adapt(remote)).get()
+			.satisfies(cb -> assertThat(((ToolAnnotationsAware) cb).getToolAnnotations()).isSameAs(annotations));
 	}
 
 	@Test
 	void ignoresCallbacksWithoutAnMcpTool() {
 		ToolCallback plain = new LegacyRemoteMcpTool("deleteFile");
 
-		assertThat(McpToolAnnotations.toolOf(plain)).isEmpty();
 		assertThat(McpToolAnnotations.adapt(plain)).isEmpty();
 		assertThat(McpToolAnnotations.adaptAll(List.of(plain))).containsExactly(plain);
 	}
@@ -64,7 +72,7 @@ class McpToolAnnotationsTests {
 	void ignoresAGetToolMethodOfAnotherType() {
 		ToolCallback other = new OtherGetTool();
 
-		assertThat(McpToolAnnotations.toolOf(other)).isEmpty();
+		assertThat(McpToolAnnotations.adapt(other)).isEmpty();
 	}
 
 	@Test
@@ -110,7 +118,7 @@ class McpToolAnnotationsTests {
 		assertThat(McpToolAnnotations.adapt(aware)).containsSame(aware);
 	}
 
-	/** Stand-in for Spring AI's SyncMcpToolCallback with the proposed getTool(). */
+	/** Stand-in for Spring AI's SyncMcpToolCallback with the proposed getToolAnnotations(). */
 	public static final class RemoteMcpTool implements ToolCallback {
 
 		final List<String> calls = new ArrayList<>();
@@ -126,8 +134,8 @@ class McpToolAnnotationsTests {
 			this.definition = ToolDefinition.builder().name(tool.name()).description(tool.name()).inputSchema("{}").build();
 		}
 
-		public McpSchema.Tool getTool() {
-			return this.tool;
+		public McpSchema.@Nullable ToolAnnotations getToolAnnotations() {
+			return this.tool.annotations();
 		}
 
 		@Override
@@ -151,7 +159,32 @@ class McpToolAnnotationsTests {
 
 	}
 
-	/** Stand-in for Spring AI 2.0's SyncMcpToolCallback, which has no getTool(). */
+	/** A callback that exposes its whole MCP tool rather than only its annotations. */
+	public static final class ToolExposingMcpTool implements ToolCallback {
+
+		private final McpSchema.Tool tool;
+
+		ToolExposingMcpTool(McpSchema.Tool tool) {
+			this.tool = tool;
+		}
+
+		public McpSchema.Tool getTool() {
+			return this.tool;
+		}
+
+		@Override
+		public ToolDefinition getToolDefinition() {
+			return ToolDefinition.builder().name(this.tool.name()).description(this.tool.name()).inputSchema("{}").build();
+		}
+
+		@Override
+		public String call(String toolInput) {
+			return "ran";
+		}
+
+	}
+
+	/** Stand-in for Spring AI 2.0's SyncMcpToolCallback, which exposes no annotations. */
 	public static final class LegacyRemoteMcpTool implements ToolCallback {
 
 		private final ToolDefinition definition;
