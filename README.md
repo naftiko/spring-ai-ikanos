@@ -123,26 +123,25 @@ ToolApprovalHandler toolApprovalHandler() {
 - **Flat input schemas.** Ikanos input parameters carry a type and description only (no nested objects, `enum` or `format`).
 - **`ToolContext` is not propagated** to the engine yet.
 - **Bindings resolve from environment variables** at capability construction, not from the Spring `Environment`.
-- **Classpath weight.** `ikanos-engine` `1.0.0-beta7` brings Restlet `2.7.0-m2` (Jetty 12) and Jackson 2 alongside Spring Boot 4's Jackson 3. They live in different packages and do not conflict as long as no Ikanos server starts. The next engine (Restlet `3.0.0-m1`, Jackson 3) needs `json-path` `3.0.0`; see below.
-- **OpenTelemetry SDK.** With `ikanos-engine` up to `1.0.0-beta7`, the core module adds `opentelemetry-sdk` at runtime (profile `otel-sdk-workaround`, on by default) because the engine links an SDK class on every tool call even with telemetry disabled (naftiko/ikanos#800). Fixed by naftiko/ikanos PR #810; the workaround goes away with the first release containing it.
-- **Remote posture and `spring-ai-starter-mcp-client`.** An Ikanos MCP server speaks only MCP `2026-07-28` (stateless, no `initialize`). Spring AI `2.0.1` ships MCP Java SDK `2.0.1`, whose client speaks at most `2025-11-25` and starts with `initialize`, so it cannot connect to an Ikanos server today. Tool definitions and outputs are nevertheless identical in both postures (verified over raw `2026-07-28` HTTP in `PostureParityIntegrationTests`).
+- **Classpath weight.** `ikanos-engine` `1.0.0-beta8` brings Restlet `3.0.0-m1` (a milestone, Jetty 12) and uses Jackson 3 like Spring Boot 4. A residual Jackson 2 remains for the engine's swagger-parser, Avro and json-structure dependencies; it lives in a different package and does not conflict. No server starts, and `opentelemetry-sdk` is not needed.
+- **Remote posture and `spring-ai-starter-mcp-client`.** An Ikanos MCP server speaks only MCP `2026-07-28` (stateless, no `initialize`). Spring AI `2.0.2` ships MCP Java SDK `2.1.0`, whose client speaks at most `2025-11-25` and starts with `initialize`, so it cannot connect to an Ikanos server today. SDK `2.2.0-M1` adds `2026-07-28`; no Spring AI release uses it yet. Tool definitions and outputs are nevertheless identical in both postures (verified over raw `2026-07-28` HTTP in `PostureParityIntegrationTests`).
 
-- **Next engine on Spring Boot 4.1: pin `json-path` `3.0.0`.** From the engine release that contains naftiko/ikanos #797 (Jackson 3), output mappings need `Jackson3JsonNodeJsonProvider`, which only exists in `json-path` `3.0.0` and later. Spring Boot 4.1 manages `2.10.0`, so every tool with a `mapping:` fails on first call with `NoClassDefFoundError`. Your application must pin it: the `<json-path.version>3.0.0</json-path.version>` property with `spring-boot-starter-parent`, or a direct `com.jayway.jsonpath:json-path:3.0.0` entry in `<dependencyManagement>` when you import the `spring-boot-dependencies` BOM. The starter cannot do it for you: the application's Boot dependency management wins over the starter's. Not needed with `1.0.0-beta7`.
+- **Spring Boot 4.1: pin `json-path` `3.0.0`.** From `ikanos-engine` `1.0.0-beta8` (Jackson 3), output mappings need `Jackson3JsonNodeJsonProvider`, which only exists in `json-path` `3.0.0` and later. Spring Boot 4.1 manages `2.10.0`, so every tool with a `mapping:` fails on first call with `NoClassDefFoundError`. Your application must pin it: the `<json-path.version>3.0.0</json-path.version>` property with `spring-boot-starter-parent`, or a direct `com.jayway.jsonpath:json-path:3.0.0` entry in `<dependencyManagement>` when you import the `spring-boot-dependencies` BOM. The starter cannot do it for you: the application's Boot dependency management wins over the starter's.
 
 ## Requirements
 
-Java 21+, Spring AI `2.0.x`, Spring Boot `4.0`/`4.1`, `io.ikanos:ikanos-engine` built on MCP Java SDK `2.x` (`1.0.0-beta7` or later). The build enforces a single `mcp-core` `2.x` on the classpath.
+Java 21+, Spring AI `2.0.x`, Spring Boot `4.0`/`4.1`, `io.ikanos:ikanos-engine` `1.0.0-beta8` or later. The build enforces a single `mcp-core` `2.x` on the classpath.
 
-`mvn verify` builds against `ikanos-engine` `1.0.0-beta7` from Maven Central.
+`mvn verify` builds against `ikanos-engine` `1.0.0-beta8` from Maven Central.
 
-To build against the next engine (naftiko/ikanos PR #810: Restlet `3.0.0-m1`, Jackson 3, embedding fixes), install it first, then activate `pr810`. The profile drops `opentelemetry-sdk` and pins `json-path` `3.0.0`:
+To build against the engine's `main` branch, install it under any snapshot version and pass that version:
 
 ```shell
-git clone --branch fix/issue-800-801-engine-embedding https://github.com/naftiko/ikanos && cd ikanos
-mvn install -pl modules/ikanos-engine -am -DskipTests -Djacoco.skip=true -Drevision=1.0.0-beta8-pr810-SNAPSHOT
+git clone https://github.com/naftiko/ikanos && cd ikanos
+mvn install -pl modules/ikanos-engine -am -DskipTests -Djacoco.skip=true -Drevision=0.0.0-engine-next-SNAPSHOT
 ```
 
-Then `mvn verify -Ppr810` here.
+Then `mvn verify -Dikanos.version=0.0.0-engine-next-SNAPSHOT` here.
 
 ## Design
 
