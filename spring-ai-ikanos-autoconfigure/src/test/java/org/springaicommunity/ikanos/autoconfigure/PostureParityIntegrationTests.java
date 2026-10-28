@@ -146,7 +146,7 @@ class PostureParityIntegrationTests {
 	void toolDefinitionsAreIdentical() throws Exception {
 		// what SyncMcpToolCallback would expose for each remote tool
 		Map<String, ToolDefinition> remote = remoteTools().stream()
-			.collect(Collectors.toMap(McpSchema.Tool::name, t -> McpToolUtils.createToolDefinition(t.name(), t)));
+			.collect(Collectors.toMap(t -> t.name(), t -> McpToolUtils.createToolDefinition(t.name(), t)));
 		Map<String, ToolCallback> local = inJvmCallbacks();
 
 		assertThat(local.keySet()).containsExactlyInAnyOrderElementsOf(remote.keySet());
@@ -180,11 +180,11 @@ class PostureParityIntegrationTests {
 	@Test
 	void annotationsAreIdenticalOnBothSides() throws Exception {
 		Map<String, McpSchema.ToolAnnotations> remote = remoteTools().stream()
-			.collect(Collectors.toMap(McpSchema.Tool::name, McpSchema.Tool::annotations));
+			.collect(Collectors.toMap(t -> t.name(), t -> t.annotations()));
 		McpServerAdapter adapter = (McpServerAdapter) this.inJvm.getCapabilities().get(0).getServerAdapters().get(0);
 		Map<String, McpSchema.ToolAnnotations> local = adapter.getTools()
 			.stream()
-			.collect(Collectors.toMap(McpSchema.Tool::name, McpSchema.Tool::annotations));
+			.collect(Collectors.toMap(t -> t.name(), t -> t.annotations()));
 
 		assertThat(local).isEqualTo(remote);
 		assertThat(local.get("decommission-ship").destructiveHint()).isTrue();

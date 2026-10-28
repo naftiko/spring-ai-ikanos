@@ -24,14 +24,14 @@ jobs:
       - name: Verify
         run: mvn -B verify
 
-  # Early warning against the next engine: naftiko/ikanos PR #810 (Restlet 3.0.0-m1 + Jackson 3
-  # from #797, plus the #800/#801 embedding fixes). Runs without opentelemetry-sdk on the
-  # classpath. Switch the ref to main once #810 merges; drop the job once a release contains it.
+  # Early warning against the next engine: naftiko/ikanos main, built as a local snapshot, so a
+  # break shows up here rather than after the next engine release.
   build-engine-next:
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
-      IKANOS_REF: fix/issue-800-801-engine-embedding
+      IKANOS_REF: main
+      IKANOS_VERSION: 0.0.0-engine-next-SNAPSHOT
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +45,7 @@ jobs:
         run: |
           git clone --depth 1 --branch "$IKANOS_REF" https://github.com/naftiko/ikanos.git "$RUNNER_TEMP/ikanos"
           mvn -B -q -f "$RUNNER_TEMP/ikanos/pom.xml" install -pl modules/ikanos-engine -am \
-            -DskipTests -Djacoco.skip=true -Drevision=1.0.0-beta8-pr810-SNAPSHOT
+            -DskipTests -Djacoco.skip=true -Drevision="$IKANOS_VERSION"
 
       - name: Verify
-        run: mvn -B verify -Ppr810
+        run: mvn -B verify -Dikanos.version="$IKANOS_VERSION"

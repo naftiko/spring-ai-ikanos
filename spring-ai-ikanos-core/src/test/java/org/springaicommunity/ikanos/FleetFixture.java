@@ -29,7 +29,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.sun.net.httpserver.HttpServer;
 import io.ikanos.Capability;
-import io.ikanos.spec.IkanosSpec;
 
 /**
  * Test fixture: a JDK {@link HttpServer} standing in for the upstream API, and a capability
@@ -67,7 +66,7 @@ public final class FleetFixture implements AutoCloseable {
 
 	public String yaml(String namespace) {
 		return """
-				ikanos: "1.0.0-beta7"
+				ikanos: "1.0.0-beta8"
 				info:
 				  display: Fleet %1$s
 				  description: spring-ai-ikanos test capability

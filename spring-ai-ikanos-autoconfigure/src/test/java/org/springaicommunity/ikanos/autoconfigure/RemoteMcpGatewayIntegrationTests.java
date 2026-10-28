@@ -49,8 +49,9 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Spike (naftiko/ikanos#782): a Spring AI 2.0 application consumes a stateless MCP
- * {@code 2026-07-28} server through an embedded Ikanos capability.
+ * Governed remote MCP ({@code consumes: type: mcp}, since Ikanos 1.0.0-beta8): a Spring AI 2.0
+ * application consumes a stateless MCP {@code 2026-07-28} server through an embedded Ikanos
+ * capability.
  *
  * <p>
  * Topology, all in one JVM on free ports:
@@ -104,7 +105,7 @@ class RemoteMcpGatewayIntegrationTests {
 	 */
 	static String gatewayYaml(int remoteMcpPort, String discovery, String extraConsumedTool) {
 		return """
-				ikanos: "1.0.0-beta7"
+				ikanos: "1.0.0-beta8"
 				info:
 				  display: Fleet gateway
 				  description: Governed access to a remote fleet MCP server

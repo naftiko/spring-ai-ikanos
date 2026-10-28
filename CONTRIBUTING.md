@@ -17,7 +17,7 @@ All commits must be signed off (`git commit -s`), certifying the [DCO](https://d
 mvn verify
 ```
 
-Requirements: Java 21+, and a locally installed `io.ikanos:ikanos-engine` snapshot until `1.0.0-beta7` is published (see the README).
+Requirements: Java 21+. `io.ikanos:ikanos-engine` resolves from Maven Central (see the README).
 
 Tests must not need network access beyond `localhost` or any API key. Optional real-LLM tests must be gated by an environment variable and skipped by default.
 

@@ -53,49 +53,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <profiles>
-        <!-- Spike for naftiko/ikanos#782 (consumes: type: mcp). Run with
-             mvn verify -Ppr782 -Dikanos.version=1.0.0-beta7-pr782-SNAPSHOT
-             after installing the #782 engine under that version. Remove once #782 is released. -->
-        <profile>
-            <id>pr782</id>
-            <!-- #782 McpClientAdapter is compiled against json-schema-validator 1.0.87, while
-                 spring-ai-mcp (mcp-json-jackson3 2.0.0) pulls 3.x: same package, incompatible API.
-                 Pinning 1.0.87 here only so the functional path can be exercised; it breaks the
-                 MCP SDK's own schema validator (not on the tested path). See design doc G5. -->
-            <dependencyManagement>
-                <dependencies>
-                    <dependency>
-                        <groupId>com.networknt</groupId>
-                        <artifactId>json-schema-validator</artifactId>
-                        <version>1.0.87</version>
-                    </dependency>
-                </dependencies>
-            </dependencyManagement>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>build-helper-maven-plugin</artifactId>
-                        <version>3.6.0</version>
-                        <executions>
-                            <execution>
-                                <id>add-pr782-tests</id>
-                                <phase>generate-test-sources</phase>
-                                <goals>
-                                    <goal>add-test-source</goal>
-                                </goals>
-                                <configuration>
-                                    <sources>
-                                        <source>src/test-pr782/java</source>
-                                    </sources>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

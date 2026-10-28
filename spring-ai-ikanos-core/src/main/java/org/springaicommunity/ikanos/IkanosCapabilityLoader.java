@@ -79,8 +79,8 @@ public final class IkanosCapabilityLoader {
 	private List<Resource> resolve(String location) {
 		try {
 			return Arrays.stream(this.resolver.getResources(location))
-				.filter(Resource::exists)
-				.sorted(Comparator.comparing(Resource::getDescription))
+				.filter(resource -> resource.exists())
+				.sorted(Comparator.comparing(resource -> resource.getDescription()))
 				.toList();
 		}
 		catch (FileNotFoundException ex) {

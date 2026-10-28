@@ -51,32 +51,6 @@
         </dependency>
     </dependencies>
 
-    <profiles>
-        <!-- F2 workaround (naftiko/ikanos#800): up to 1.0.0-beta7, ikanos-engine marks
-             opentelemetry-sdk <optional> but TelemetryBootstrap links
-             io.opentelemetry.sdk.trace.SpanProcessor on every ToolHandler.handleToolCall, even with
-             telemetry(false). Without it every tool call fails with NoClassDefFoundError.
-             Fixed by naftiko/ikanos PR #810: activating -Ppr810 (defined here and in the parent)
-             deactivates this profile, proving the bridge runs without the SDK.
-             Delete this profile once the bridge depends on a release containing #810. -->
-        <profile>
-            <id>otel-sdk-workaround</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>io.opentelemetry</groupId>
-                    <artifactId>opentelemetry-sdk</artifactId>
-                    <scope>runtime</scope>
-                </dependency>
-            </dependencies>
-        </profile>
-        <profile>
-            <id>pr810</id>
-        </profile>
-    </profiles>
-
     <build>
         <plugins>
             <!-- Share FleetFixture with the autoconfigure module's tests -->
