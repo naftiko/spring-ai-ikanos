@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.jspecify.annotations.Nullable;
+import org.springaicommunity.ikanos.ToolAuthorizationMode;
 import org.springaicommunity.ikanos.approval.ToolApprovalMode;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -60,6 +61,8 @@ public class IkanosProperties {
 	private boolean telemetry;
 
 	private final Approval approval = new Approval();
+
+	private final Authorization authorization = new Authorization();
 
 	public boolean isEnabled() {
 		return this.enabled;
@@ -103,6 +106,33 @@ public class IkanosProperties {
 
 	public Approval getApproval() {
 		return this.approval;
+	}
+
+	public Authorization getAuthorization() {
+		return this.authorization;
+	}
+
+	/**
+	 * Authorization requirements (scopes, claims) that capabilities declare on their tools.
+	 */
+	public static class Authorization {
+
+		/**
+		 * How to treat tools that declare an authorization requirement. 'enforce' checks each call
+		 * against the caller's claims, found by the IkanosCallerClaimsResolver bean (provided with
+		 * a Spring Security resource server), and fails startup when there is none; 'none' disables
+		 * the check for applications that authorize tool calls themselves.
+		 */
+		private ToolAuthorizationMode mode = ToolAuthorizationMode.ENFORCE;
+
+		public ToolAuthorizationMode getMode() {
+			return this.mode;
+		}
+
+		public void setMode(ToolAuthorizationMode mode) {
+			this.mode = mode;
+		}
+
 	}
 
 	/**

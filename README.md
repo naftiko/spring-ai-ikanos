@@ -50,8 +50,9 @@ The tools are deliberately **not** added to every `ChatClient`: attach them wher
 | `spring.ai.ikanos.tool-name-prefix` | none | Prefix for tool names shown to the model (the engine always gets the original name) |
 | `spring.ai.ikanos.telemetry` | `false` | Ikanos' own OpenTelemetry tracing and metrics |
 | `spring.ai.ikanos.approval.mode` | `require-handler` | How tools that may be destructive are gated: `require-handler`, `deny-destructive` or `none` (see [Approval gate](#approval-gate)) |
+| `spring.ai.ikanos.authorization.mode` | `enforce` | Whether a tool's `authorization` requirement is checked against the caller's claims: `enforce` or `none` (see [Authorization](#authorization)) |
 
-Startup fails fast when no capability is configured, a location matches nothing, an `expose` namespace does not exist, two tools end up with the same name, or a tool that may be destructive has no approval handler.
+Startup fails fast when no capability is configured, a location matches nothing, an `expose` namespace does not exist, two tools end up with the same name, a tool that may be destructive has no approval handler, or a tool declares an `authorization` requirement and nothing can find the caller's claims.
 
 Use `file:` locations when a capability uses relative `import`s: resources inside a jar are parsed from their stream and cannot resolve relative paths.
 
@@ -118,10 +119,44 @@ ToolApprovalHandler toolApprovalHandler() {
           ToolApprovalMode.REQUIRE_HANDLER, handler);
   ```
 
+## Authorization
+
+A capability can declare what the caller must hold to call a tool, with an `authorization` block (scopes, claims) on the tool or its MCP adapter. On a remote Ikanos MCP server, the engine checks it against the validated access token. In-JVM there is no token: the agent and the tools share the process, and the caller that matters is the application's own user, whom the application has already authenticated. The bridge checks the requirement against that user's claims, with the engine's own rules, and passes the claims on, so `{{auth.claims.sub}}` templates work in-JVM too.
+
+```yaml
+tools:
+  decommission-ship:
+    authorization:
+      scopes: [fleet.admin]
+    call: registry.decommission
+consumes:
+- namespace: registry
+  inputParameters:
+    X-User-Id: { in: header, value: "{{auth.claims.sub}}" }
+```
+
+An `IkanosCallerClaimsResolver` finds the claims of each call:
+
+- **Spring Security.** With `spring-security-oauth2-resource-server` on the classpath, the auto-configuration provides a `SecurityContextCallerClaimsResolver`: the attributes of the access token the resource server authenticated (a JWT's claims, an opaque token's introspected attributes). The security context is bound to the request thread, which is where a synchronous `ChatClient` call runs its tools.
+- **Tool context.** `IkanosCallerClaimsResolver.fromToolContext()` reads a claims map the application passes per request, whatever thread runs the tool: `.toolContext(Map.of(IkanosCallerClaimsResolver.TOOL_CONTEXT_KEY, claims))`. The Spring Security resolver reads it first.
+- **Your own.** Define an `IkanosCallerClaimsResolver` bean, or call `callerClaimsResolver(...)` on the builder.
+
+The resolver must return claims the application validated, never anything the model produced: Ikanos does not validate them.
+
+| `spring.ai.ikanos.authorization.mode` | Without a resolver | With a resolver |
+|---|---|---|
+| `enforce` (default) | **Startup fails**, naming the tools that declare a requirement | Each call checked; no claims, or claims that fall short, are denied |
+| `none` | No check (logged at `WARN`); `{{auth.claims...}}` templates fail closed | No check (logged at `WARN`); claims still reach templates |
+
+- A denial is **returned to the model** as the tool result (`Denied: <reason>`), as the approval gate does, and the tool does not run.
+- The requirement is the tool's, else its adapter's, as on a remote server. A tool with no requirement runs for any caller.
+- A capability with no `authorization` anywhere needs no resolver.
+- Requires an `ikanos-engine` that contains naftiko/ikanos#1127 (issue naftiko/ikanos#1126), not in `1.0.0-beta10`.
+
 ## Known limits
 
 - **Flat input schemas.** Ikanos input parameters carry a type and description only (no nested objects, `enum` or `format`).
-- **`ToolContext` is not propagated** to the engine yet.
+- **`ToolContext` reaches the engine only as caller claims** (see [Authorization](#authorization)); other entries are not passed to the capability.
 - **Bindings resolve from environment variables** at capability construction, not from the Spring `Environment`.
 - **Classpath weight.** `ikanos-engine` `1.0.0-beta10` brings Restlet `3.0.0-m1` (a milestone, Jetty 12) and uses Jackson 3 like Spring Boot 4. A residual Jackson 2 remains for the engine's swagger-parser, Avro and json-structure dependencies; it lives in a different package and does not conflict. No server starts, and `opentelemetry-sdk` is not needed.
 - **Remote posture and `spring-ai-starter-mcp-client`.** An Ikanos MCP server speaks only MCP `2026-07-28` (stateless, no `initialize`). Spring AI `2.0.2` ships MCP Java SDK `2.1.0`, whose client speaks at most `2025-11-25` and starts with `initialize`, so it cannot connect to an Ikanos server today. SDK `2.2.0-M1` adds `2026-07-28`; no Spring AI release uses it yet. Tool definitions and outputs are nevertheless identical in both postures (verified over raw `2026-07-28` HTTP in `PostureParityIntegrationTests`).
@@ -130,9 +165,9 @@ ToolApprovalHandler toolApprovalHandler() {
 
 ## Requirements
 
-Java 21+, Spring AI `2.0.x`, Spring Boot `4.0`/`4.1`, `io.ikanos:ikanos-engine` `1.0.0-beta10` or later. The build enforces a single `mcp-core` `2.x` on the classpath.
+Java 21+, Spring AI `2.0.x`, Spring Boot `4.0`/`4.1`, `io.ikanos:ikanos-engine` with naftiko/ikanos#1127 (embedded caller claims): the first Ikanos release after `1.0.0-beta10` that includes it. The build enforces a single `mcp-core` `2.x` on the classpath.
 
-`mvn verify` builds against `ikanos-engine` `1.0.0-beta10` from Maven Central.
+`mvn verify` builds against `ikanos-engine` `1.0.0-beta10` from Maven Central. Until an Ikanos release includes naftiko/ikanos#1127, build the engine from that branch (`feat/issue-1126-embedded-caller-claims`) as below.
 
 To build against the engine's `main` branch, install it under any snapshot version and pass that version:
 

@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
-      IKANOS_REF: main
+      IKANOS_REF: feat/issue-1126-embedded-caller-claims  # back to main once naftiko/ikanos#1127 merges
       IKANOS_VERSION: 0.0.0-engine-next-SNAPSHOT
     steps:
       - uses: actions/checkout@v4

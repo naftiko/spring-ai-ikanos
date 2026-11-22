@@ -25,9 +25,13 @@ import java.util.Map;
 import java.util.Set;
 
 import io.ikanos.Capability;
+import io.ikanos.engine.exposes.AccessControl;
 import io.ikanos.engine.exposes.ServerAdapter;
 import io.ikanos.engine.exposes.mcp.McpServerAdapter;
+import io.ikanos.spec.exposes.AuthorizationSpec;
 import io.modelcontextprotocol.spec.McpSchema;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
 import org.springaicommunity.ikanos.approval.ToolApprovalGate;
 import org.springaicommunity.ikanos.approval.ToolApprovalHandler;
@@ -58,6 +62,8 @@ import org.springframework.util.Assert;
  */
 public final class IkanosToolCallbackProvider implements ToolCallbackProvider {
 
+	private static final Log logger = LogFactory.getLog(IkanosToolCallbackProvider.class);
+
 	private final ToolCallback[] toolCallbacks;
 
 	private IkanosToolCallbackProvider(List<ToolCallback> toolCallbacks) {
@@ -87,6 +93,10 @@ public final class IkanosToolCallbackProvider implements ToolCallbackProvider {
 		private ToolApprovalMode approvalMode = ToolApprovalMode.REQUIRE_HANDLER;
 
 		private @Nullable ToolApprovalHandler approvalHandler;
+
+		private ToolAuthorizationMode authorizationMode = ToolAuthorizationMode.ENFORCE;
+
+		private @Nullable IkanosCallerClaimsResolver callerClaimsResolver;
 
 		private Builder() {
 		}
@@ -152,15 +162,41 @@ public final class IkanosToolCallbackProvider implements ToolCallbackProvider {
 		}
 
 		/**
+		 * How to treat tools whose capability declares an {@code authorization} requirement.
+		 * Defaults to {@link ToolAuthorizationMode#ENFORCE}.
+		 * @param authorizationMode the mode
+		 * @return this builder
+		 */
+		public Builder authorizationMode(ToolAuthorizationMode authorizationMode) {
+			Assert.notNull(authorizationMode, "authorizationMode must not be null");
+			this.authorizationMode = authorizationMode;
+			return this;
+		}
+
+		/**
+		 * Finds the claims of the user each call is made for, checked against
+		 * {@code authorization} requirements and read by {@code {{auth.claims...}}} templates.
+		 * @param callerClaimsResolver the resolver, or {@code null} for no caller identity
+		 * @return this builder
+		 */
+		public Builder callerClaimsResolver(@Nullable IkanosCallerClaimsResolver callerClaimsResolver) {
+			this.callerClaimsResolver = callerClaimsResolver;
+			return this;
+		}
+
+		/**
 		 * Build the provider.
 		 * @return the provider
 		 * @throws IllegalArgumentException on duplicate tool names or unknown namespaces
 		 * @throws org.springaicommunity.ikanos.approval.ToolApprovalRequiredException in
 		 * {@code REQUIRE_HANDLER} mode when a tool may be destructive and no handler is set
+		 * @throws IllegalStateException in {@link ToolAuthorizationMode#ENFORCE} mode when a tool
+		 * declares an {@code authorization} requirement and no caller claims resolver is set
 		 */
 		public IkanosToolCallbackProvider build() {
 			Map<String, ToolCallback> byName = new LinkedHashMap<>();
 			Set<String> matchedNamespaces = new LinkedHashSet<>();
+			Set<String> authorized = new LinkedHashSet<>();
 
 			for (Capability capability : this.capabilities) {
 				for (ServerAdapter adapter : capability.getServerAdapters()) {
@@ -175,8 +211,14 @@ public final class IkanosToolCallbackProvider implements ToolCallbackProvider {
 					ToolInvoker invoker = mcp.getToolHandler()::handleToolCall;
 					for (McpSchema.Tool tool : mcp.getTools()) {
 						String exposedName = this.toolNamePrefix + tool.name();
-						ToolCallback previous = byName.putIfAbsent(exposedName,
-								new IkanosToolCallback(invoker, tool, exposedName));
+						// the tool's requirement, else its adapter's, as the remote MCP transport picks it
+						AuthorizationSpec requirement = AccessControl.effective(mcp.getMcpServerSpec(),
+								mcp.getMcpServerSpec().getTools().get(tool.name()));
+						if (requirement != null) {
+							authorized.add(exposedName);
+						}
+						ToolCallback previous = byName.putIfAbsent(exposedName, new IkanosToolCallback(invoker, tool,
+								exposedName, requirement, this.authorizationMode, this.callerClaimsResolver));
 						if (previous != null) {
 							throw new IllegalArgumentException("Duplicate Ikanos tool name '" + exposedName
 									+ "' (MCP namespace '" + namespace + "'). Use distinct tool names, "
@@ -191,8 +233,29 @@ public final class IkanosToolCallbackProvider implements ToolCallbackProvider {
 			if (!unknown.isEmpty()) {
 				throw new IllegalArgumentException("No MCP expose found for namespace(s) " + unknown);
 			}
+			checkAuthorization(authorized);
 			return new IkanosToolCallbackProvider(
 					ToolApprovalGate.apply(new ArrayList<>(byName.values()), this.approvalMode, this.approvalHandler));
+		}
+
+		/**
+		 * Fail when tools declare a requirement that cannot be checked, or warn when checking is
+		 * turned off.
+		 * @param authorized the exposed names of the tools that declare a requirement
+		 */
+		private void checkAuthorization(Set<String> authorized) {
+			if (authorized.isEmpty()) {
+				return;
+			}
+			if (this.authorizationMode == ToolAuthorizationMode.NONE) {
+				logger.warn("Tool authorization is disabled (mode NONE): the authorization requirements of "
+						+ authorized + " are not checked; the application must authorize these calls");
+			}
+			else if (this.callerClaimsResolver == null) {
+				throw new IllegalStateException("Tools " + authorized + " declare an authorization requirement, "
+						+ "but no IkanosCallerClaimsResolver is set to find the caller's claims. Set one, or set "
+						+ "ToolAuthorizationMode.NONE if the application authorizes these calls itself.");
+			}
 		}
 
 	}

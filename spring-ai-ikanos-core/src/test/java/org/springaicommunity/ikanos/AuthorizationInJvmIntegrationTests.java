@@ -28,9 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * In-JVM there is no HTTP request, so no OAuth2 caller and no validated claims. What happens to a
- * tool that declares an {@code authorization} requirement (naftiko/ikanos#999) or reads the
- * caller's claims (naftiko/ikanos#998), both from {@code 1.0.0-beta10}.
+ * In-JVM there is no HTTP request, so no OAuth2 caller: with no caller claims resolver, a tool
+ * that reads the caller's claims (naftiko/ikanos#998, from {@code 1.0.0-beta10}) fails closed.
+ * Authorization requirements are covered by {@code ToolAuthorizationIntegrationTests}.
  */
 class AuthorizationInJvmIntegrationTests {
 
@@ -72,16 +72,6 @@ class AuthorizationInJvmIntegrationTests {
 				      resource: "http://localhost/mcp"
 				      scopes: ["fleet.read", "fleet.admin"]
 				    tools:
-				      scoped-ship:
-				        description: Read the ship, for callers with fleet.admin
-				        hints:
-				          readOnly: true
-				        authorization:
-				          scopes: ["fleet.admin"]
-				        call: registry.get-ship
-				        outputParameters:
-				        - type: boolean
-				          mapping: "$.ok"
 				      my-ship:
 				        description: Read the caller's own ship
 				        hints:
@@ -102,13 +92,6 @@ class AuthorizationInJvmIntegrationTests {
 	@AfterEach
 	void tearDown() {
 		this.upstream.close();
-	}
-
-	@Test
-	void scopedToolRunsWithoutAScopeCheckInJvm() {
-		RecordingUpstream.tool(this.provider, "scoped-ship").call("{}");
-
-		assertThat(this.upstream.requests).hasSize(1);
 	}
 
 	@Test

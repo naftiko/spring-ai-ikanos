@@ -18,10 +18,14 @@ package org.springaicommunity.ikanos;
 
 import java.util.Map;
 
+import io.ikanos.engine.exposes.AccessControl;
+import io.ikanos.engine.exposes.CallerClaims;
+import io.ikanos.spec.exposes.AuthorizationSpec;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
+import org.springaicommunity.ikanos.approval.ApprovalGatedToolCallback;
 import org.springaicommunity.ikanos.approval.ToolAnnotationsAware;
 
 import org.springframework.ai.chat.model.ToolContext;
@@ -54,8 +58,12 @@ import org.springframework.util.StringUtils;
  * </ul>
  *
  * <p>
- * The {@link ToolContext} is currently ignored: the Ikanos engine has no per-call context
- * channel yet.
+ * Caller identity: an {@link IkanosCallerClaimsResolver} finds the claims of the user the call
+ * is made for (from the {@link ToolContext} or the application's security context). In
+ * {@link ToolAuthorizationMode#ENFORCE} the tool's {@code authorization} requirement is checked
+ * against them first, with the engine's own rules, and a call that falls short is returned to
+ * the model as {@code "Denied: <reason>"}; the claims then reach {@code {{auth.claims...}}}
+ * templates, as a validated token's do on a remote Ikanos MCP server.
  */
 public final class IkanosToolCallback implements ToolCallback, ToolAnnotationsAware {
 
@@ -71,20 +79,48 @@ public final class IkanosToolCallback implements ToolCallback, ToolAnnotationsAw
 
 	private final ToolMetadata metadata = ToolMetadata.builder().build();
 
+	private final @Nullable AuthorizationSpec requirement;
+
+	private final ToolAuthorizationMode authorizationMode;
+
+	private final @Nullable IkanosCallerClaimsResolver claimsResolver;
+
 	/**
-	 * Create a callback.
+	 * Create a callback with no caller identity: a tool that reads {@code {{auth.claims...}}}
+	 * fails, and no {@code authorization} requirement is checked.
 	 * @param invoker executes the tool in-heap
 	 * @param tool the Ikanos tool as advertised by the capability
 	 * @param exposedName the name shown to the model (possibly prefixed); the engine is always
 	 * called with {@code tool.name()}
 	 */
 	public IkanosToolCallback(ToolInvoker invoker, McpSchema.Tool tool, String exposedName) {
+		this(invoker, tool, exposedName, null, ToolAuthorizationMode.NONE, null);
+	}
+
+	/**
+	 * Create a callback that passes the caller's claims to the engine and, in
+	 * {@link ToolAuthorizationMode#ENFORCE}, checks the tool's {@code authorization} requirement
+	 * against them before each call.
+	 * @param invoker executes the tool in-heap
+	 * @param tool the Ikanos tool as advertised by the capability
+	 * @param exposedName the name shown to the model (possibly prefixed)
+	 * @param requirement the tool's effective requirement, or {@code null} for none
+	 * @param authorizationMode whether to check the requirement
+	 * @param claimsResolver finds the caller's claims, or {@code null} for no caller
+	 */
+	public IkanosToolCallback(ToolInvoker invoker, McpSchema.Tool tool, String exposedName,
+			@Nullable AuthorizationSpec requirement, ToolAuthorizationMode authorizationMode,
+			@Nullable IkanosCallerClaimsResolver claimsResolver) {
 		Assert.notNull(invoker, "invoker must not be null");
 		Assert.notNull(tool, "tool must not be null");
 		Assert.hasText(exposedName, "exposedName must not be empty");
+		Assert.notNull(authorizationMode, "authorizationMode must not be null");
 		this.invoker = invoker;
 		this.tool = tool;
 		this.definition = McpToolUtils.createToolDefinition(exposedName, tool);
+		this.requirement = requirement;
+		this.authorizationMode = authorizationMode;
+		this.claimsResolver = claimsResolver;
 	}
 
 	@Override
@@ -123,9 +159,17 @@ public final class IkanosToolCallback implements ToolCallback, ToolAnnotationsAw
 	public String call(String toolInput, @Nullable ToolContext toolContext) {
 		Map<String, Object> arguments = StringUtils.hasText(toolInput) ? json.fromJsonToMap(toolInput) : Map.of();
 
+		Map<String, Object> claims = (this.claimsResolver != null) ? this.claimsResolver.resolve(toolContext) : null;
+		if (this.authorizationMode == ToolAuthorizationMode.ENFORCE) {
+			AccessControl.Denial denial = AccessControl.check(this.requirement, claims);
+			if (denial != null) {
+				return ApprovalGatedToolCallback.DENIED_PREFIX + denial.description();
+			}
+		}
+
 		McpSchema.CallToolResult result;
 		try {
-			result = this.invoker.invoke(this.tool.name(), arguments);
+			result = invoke(arguments, CallerClaims.of(claims));
 		}
 		catch (Exception ex) {
 			logger.warn("Ikanos tool '" + this.tool.name() + "' failed", ex);
@@ -142,6 +186,42 @@ public final class IkanosToolCallback implements ToolCallback, ToolAnnotationsAw
 					new IllegalStateException("Error calling tool: " + result.content()));
 		}
 		return json.toJson(result.content());
+	}
+
+	/**
+	 * Invoke the engine, with {@code caller} as the caller root of this thread when there is one,
+	 * as the MCP transport does for a validated token.
+	 */
+	private McpSchema.CallToolResult invoke(Map<String, Object> arguments, @Nullable Map<String, Object> caller)
+			throws Exception {
+		if (caller == null) {
+			return this.invoker.invoke(this.tool.name(), arguments);
+		}
+		try {
+			return CallerClaims.runAs(caller, () -> {
+				try {
+					return this.invoker.invoke(this.tool.name(), arguments);
+				}
+				catch (Exception ex) {
+					throw new InvocationFailure(ex);
+				}
+			});
+		}
+		catch (InvocationFailure failure) {
+			throw failure.exception;
+		}
+	}
+
+	/** Carries a checked engine exception out of {@link CallerClaims#runAs}. */
+	private static final class InvocationFailure extends RuntimeException {
+
+		private final Exception exception;
+
+		InvocationFailure(Exception exception) {
+			super(exception);
+			this.exception = exception;
+		}
+
 	}
 
 	@Override
