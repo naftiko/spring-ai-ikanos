@@ -130,7 +130,7 @@ ToolApprovalHandler toolApprovalHandler() {
 
 ## Requirements
 
-Java 21+, Spring AI `2.0.x`, Spring Boot `4.0`/`4.1`, `io.ikanos:ikanos-engine` `1.0.0-beta8` or later. The build enforces a single `mcp-core` `2.x` on the classpath.
+Java 25+, Spring AI `2.0.x`, Spring Boot `4.0`/`4.1`, `io.ikanos:ikanos-engine` `1.0.0-beta8` or later. The build enforces a single `mcp-core` `2.x` on the classpath.
 
 `mvn verify` builds against `ikanos-engine` `1.0.0-beta8` from Maven Central.
 
