@@ -40,9 +40,9 @@
 
         <spring-ai.version>2.0.2</spring-ai.version>
         <spring-boot.version>4.1.1</spring-boot.version>
-        <ikanos.version>1.0.0-beta8</ikanos.version>
+        <ikanos.version>1.0.0-beta10</ikanos.version>
         <!-- Not managed by the Spring AI BOM; matches what spring-ai-mcp 2.0.2 resolves
-             (ikanos-engine 1.0.0-beta8 is built on 2.0.1 and runs on 2.1.0 unchanged) -->
+             (ikanos-engine 1.0.0-beta10 is built on 2.0.1 and runs on 2.1.0 unchanged) -->
         <mcp-core.version>2.1.0</mcp-core.version>
 
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>

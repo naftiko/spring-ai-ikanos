@@ -123,16 +123,16 @@ ToolApprovalHandler toolApprovalHandler() {
 - **Flat input schemas.** Ikanos input parameters carry a type and description only (no nested objects, `enum` or `format`).
 - **`ToolContext` is not propagated** to the engine yet.
 - **Bindings resolve from environment variables** at capability construction, not from the Spring `Environment`.
-- **Classpath weight.** `ikanos-engine` `1.0.0-beta8` brings Restlet `3.0.0-m1` (a milestone, Jetty 12) and uses Jackson 3 like Spring Boot 4. A residual Jackson 2 remains for the engine's swagger-parser, Avro and json-structure dependencies; it lives in a different package and does not conflict. No server starts, and `opentelemetry-sdk` is not needed.
+- **Classpath weight.** `ikanos-engine` `1.0.0-beta10` brings Restlet `3.0.0-m1` (a milestone, Jetty 12) and uses Jackson 3 like Spring Boot 4. A residual Jackson 2 remains for the engine's swagger-parser, Avro and json-structure dependencies; it lives in a different package and does not conflict. No server starts, and `opentelemetry-sdk` is not needed.
 - **Remote posture and `spring-ai-starter-mcp-client`.** An Ikanos MCP server speaks only MCP `2026-07-28` (stateless, no `initialize`). Spring AI `2.0.2` ships MCP Java SDK `2.1.0`, whose client speaks at most `2025-11-25` and starts with `initialize`, so it cannot connect to an Ikanos server today. SDK `2.2.0-M1` adds `2026-07-28`; no Spring AI release uses it yet. Tool definitions and outputs are nevertheless identical in both postures (verified over raw `2026-07-28` HTTP in `PostureParityIntegrationTests`).
 
 - **Spring Boot 4.1: pin `json-path` `3.0.0`.** From `ikanos-engine` `1.0.0-beta8` (Jackson 3), output mappings need `Jackson3JsonNodeJsonProvider`, which only exists in `json-path` `3.0.0` and later. Spring Boot 4.1 manages `2.10.0`, so every tool with a `mapping:` fails on first call with `NoClassDefFoundError`. Your application must pin it: the `<json-path.version>3.0.0</json-path.version>` property with `spring-boot-starter-parent`, or a direct `com.jayway.jsonpath:json-path:3.0.0` entry in `<dependencyManagement>` when you import the `spring-boot-dependencies` BOM. The starter cannot do it for you: the application's Boot dependency management wins over the starter's.
 
 ## Requirements
 
-Java 21+, Spring AI `2.0.x`, Spring Boot `4.0`/`4.1`, `io.ikanos:ikanos-engine` `1.0.0-beta8` or later. The build enforces a single `mcp-core` `2.x` on the classpath.
+Java 21+, Spring AI `2.0.x`, Spring Boot `4.0`/`4.1`, `io.ikanos:ikanos-engine` `1.0.0-beta10` or later. The build enforces a single `mcp-core` `2.x` on the classpath.
 
-`mvn verify` builds against `ikanos-engine` `1.0.0-beta8` from Maven Central.
+`mvn verify` builds against `ikanos-engine` `1.0.0-beta10` from Maven Central.
 
 To build against the engine's `main` branch, install it under any snapshot version and pass that version:
 
