@@ -20,6 +20,7 @@ import java.util.List;
 
 import io.ikanos.Capability;
 import org.springaicommunity.ikanos.IkanosCapabilityLifecycle;
+import org.springaicommunity.ikanos.IkanosCallerClaimsResolver;
 import org.springaicommunity.ikanos.IkanosCapabilityLoader;
 import org.springaicommunity.ikanos.IkanosToolCallbackProvider;
 import org.springaicommunity.ikanos.approval.ToolApprovalHandler;
@@ -32,9 +33,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.support.ResourcePatternResolver;
 import org.springframework.core.io.support.ResourcePatternUtils;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.security.oauth2.server.resource.authentication.AbstractOAuth2TokenAuthenticationToken;
 
 /**
  * Auto-configuration for in-JVM Ikanos capability tools.
@@ -49,6 +52,13 @@ import org.springframework.core.io.ResourceLoader;
  * Tools that may be destructive are gated according to {@code spring.ai.ikanos.approval.mode}.
  * With the default {@code require-handler}, startup fails unless a single
  * {@link ToolApprovalHandler} bean is available.
+ *
+ * <p>
+ * Tools whose capability declares an {@code authorization} requirement are checked according to
+ * {@code spring.ai.ikanos.authorization.mode}, against the claims of a single
+ * {@link IkanosCallerClaimsResolver} bean. With a Spring Security resource server on the
+ * classpath, a {@link SecurityContextCallerClaimsResolver} is provided. With the default
+ * {@code enforce} and no resolver, startup fails, naming the tools.
  */
 @AutoConfiguration
 @ConditionalOnClass({ Capability.class, ToolCallbackProvider.class })
@@ -74,14 +84,32 @@ public class IkanosAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	IkanosToolCallbackProvider ikanosToolCallbackProvider(IkanosCapabilityLifecycle lifecycle,
-			IkanosProperties properties, ObjectProvider<ToolApprovalHandler> approvalHandler) {
+			IkanosProperties properties, ObjectProvider<ToolApprovalHandler> approvalHandler,
+			ObjectProvider<IkanosCallerClaimsResolver> callerClaimsResolver) {
 		return IkanosToolCallbackProvider.builder()
 			.capabilities(lifecycle.getCapabilities())
 			.exposeNamespaces(properties.getExpose())
 			.toolNamePrefix(properties.getToolNamePrefix())
 			.approvalMode(properties.getApproval().getMode())
 			.approvalHandler(approvalHandler.getIfUnique())
+			.authorizationMode(properties.getAuthorization().getMode())
+			.callerClaimsResolver(callerClaimsResolver.getIfUnique())
 			.build();
+	}
+
+	/**
+	 * With a Spring Security resource server, tools are called as the user it authenticated.
+	 */
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnClass(AbstractOAuth2TokenAuthenticationToken.class)
+	static class SecurityCallerClaimsConfiguration {
+
+		@Bean
+		@ConditionalOnMissingBean
+		IkanosCallerClaimsResolver ikanosCallerClaimsResolver() {
+			return new SecurityContextCallerClaimsResolver();
+		}
+
 	}
 
 }
