@@ -67,37 +67,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <!-- Engine features newer than the default ikanos.version (capability.binds, elicit,
-             authorization and caller claims, from 1.0.0-beta10). Run against an engine that has them:
-               mvn verify -Pengine-next -Dikanos.version=<engine version>
-             Move src/test-engine-next into src/test once the default engine has them. -->
-        <profile>
-            <id>engine-next</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>build-helper-maven-plugin</artifactId>
-                        <version>3.6.0</version>
-                        <executions>
-                            <execution>
-                                <id>add-engine-next-tests</id>
-                                <phase>generate-test-sources</phase>
-                                <goals>
-                                    <goal>add-test-source</goal>
-                                </goals>
-                                <configuration>
-                                    <sources>
-                                        <source>src/test-engine-next/java</source>
-                                    </sources>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

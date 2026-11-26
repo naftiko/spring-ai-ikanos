@@ -48,4 +48,4 @@ jobs:
             -DskipTests -Djacoco.skip=true -Drevision="$IKANOS_VERSION"
 
       - name: Verify
-        run: mvn -B verify -Pengine-next -Dikanos.version="$IKANOS_VERSION"
+        run: mvn -B verify -Dikanos.version="$IKANOS_VERSION"

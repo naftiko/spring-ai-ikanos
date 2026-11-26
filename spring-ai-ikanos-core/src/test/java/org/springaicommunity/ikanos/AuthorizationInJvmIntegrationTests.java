@@ -45,7 +45,7 @@ class AuthorizationInJvmIntegrationTests {
 				ikanos: "1.0.0-beta10"
 				info:
 				  display: Authorization
-				  description: spring-ai-ikanos engine-next test capability
+				  description: spring-ai-ikanos test capability
 				capability:
 				  consumes:
 				  - namespace: registry

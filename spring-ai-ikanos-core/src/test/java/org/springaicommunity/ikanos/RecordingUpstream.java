@@ -65,7 +65,7 @@ final class RecordingUpstream implements AutoCloseable {
 
 	/** Load a capability through the engine, never with a test-owned mapper. */
 	static Capability load(String yaml) throws IOException {
-		Path file = Files.createTempFile("engine-next-", ".yml");
+		Path file = Files.createTempFile("capability-", ".yml");
 		try {
 			Files.writeString(file, yaml);
 			return Capability.builder().loadFromFile(file).telemetry(false).build();

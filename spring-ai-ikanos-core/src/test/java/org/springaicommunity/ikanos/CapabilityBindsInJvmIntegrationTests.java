@@ -93,7 +93,7 @@ class CapabilityBindsInJvmIntegrationTests {
 				ikanos: "1.0.0-beta10"
 				info:
 				  display: Binds
-				  description: spring-ai-ikanos engine-next test capability
+				  description: spring-ai-ikanos test capability
 				%s  consumes:
 				  - namespace: upstream
 				    type: http
